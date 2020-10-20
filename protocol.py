@@ -1,35 +1,89 @@
 
 import gpiozero
 import time
+import random
 
-line_clock = gpiozero.InputDevice(23)
-line_data = gpiozero.InputDevice(24)
+in_clock = gpiozero.InputDevice(23)
+in_data = gpiozero.InputDevice(24)
+
+out_clock = gpiozero.OutputDevice(25)
+out_data = gpiozero.OutputDevice(8)
 
 timeout = 0.1 #s
 
-def main():
-    init_morse_dict()
-
-    status = False
+def read_string():
+    status = in_clock.value
     next_timeout = time.clock() + timeout
-
     data = [0] * 100000
     data_size = 0
     while True:
-        new_status = line_clock.value
+        new_status = in_clock.value
         new_time = time.clock()
-        if new_time > next_timeout:
-            next_timeout = new_time + timeout
-            if data_size != 0:
-                print("-----------------")
-                decode_buffer(data, data_size)
-                data_size = 0
             
         if new_status != status:
             next_timeout = new_time + timeout
             status = new_status
-            data[data_size] = line_data.value
+            data[data_size] = in_data.value
             data_size += 1
+
+        elif new_time > next_timeout:
+            if data_size != 0:
+                return decode_buffer(data, data_size)
+
+def main():
+    init_morse_dict()
+    while True:
+        incoming = read_string()
+        if incoming:
+            print("NODE:"+incoming)
+            if incoming == "HI":
+                time.sleep(0.2)
+                write_string("HI")
+                incoming = read_string()
+                print("NODE:"+incoming)
+                if incoming == "WHAT IS YOUR NAME":
+                    names = ["Raspberry", "Andres", "German"]
+                    name_idx = random.randrange(len(names))
+                    name = names[name_idx]
+                    write_string(name)
+                    
+
+
+def write_string(output):
+    print("RPI2:" + output)
+    upper = output.upper()
+    for letter in upper:
+        code = morse_dict.get(letter)
+        if code:
+            write_letter(code)
+        
+
+def write_letter(char_code):
+    for bit in char_code:
+        if bit == '.':
+            write_dot()
+        else:
+            write_dash()
+    write_bit(False)
+        
+    
+def write_dot():
+    # codified as 10
+    write_bit(True)
+    write_bit(False)
+    
+def write_dash():
+    #codified as 110
+    write_bit(True)
+    write_bit(True)
+    write_bit(False)
+
+
+def write_bit(bit):
+    out_data.value = bit
+    out_clock.value = not out_clock.value
+    time.sleep(0.001)
+    
 
 morse_dict = {
     "A": ".-",
@@ -59,6 +113,20 @@ morse_dict = {
     "Y": "-.--",
     "Z": "--..",
 }
+morse_dict["1"] = ".----"
+morse_dict["2"] = "..---"
+morse_dict["3"] = "...--"
+morse_dict["4"] = "....-"
+morse_dict["5"] = "....."
+morse_dict["6"] = "-...."
+morse_dict["7"] = "--..."
+morse_dict["8"] = "---.."
+morse_dict["9"] = "----."
+morse_dict["0"] = "-----"
+
+# using other unclaimed codes for special chars:
+morse_dict[" "] = "..--"
+
 morse_dict_rev = {}
 
 def init_morse_dict():
@@ -92,6 +160,6 @@ def decode_buffer(buf, buf_size):
                 cursor += 1
                 current_letter.append(".")
                 
-    print(current_word)
+    return "".join(current_word)
 
 main()
